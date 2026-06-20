@@ -10,9 +10,9 @@
     ]
   },
   "deploy": {
-    "startCommand": "bun start",
+    "startCommand": "bun run start",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 10,
+    "healthcheckTimeout": 300,
     "healthcheckInterval": 30,
     "restartPolicyType": "ON_FAILURE",
     "numReplicas": 1,
@@ -20,7 +20,6 @@
   },
   "variables": {
     "NODE_ENV": "production",
-    "PORT": "3000",
     "NODE_OPTIONS": "--max-old-space-size=512"
   }
 }
