@@ -2,10 +2,10 @@
   "name": "railway-gateway",
   "version": "1.0.0",
   "description": "Proxy Gateway dengan WebSocket & UDP native support untuk Railway",
-  "main": "dist/server.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/server.js",
-    "dev": "tsx server.ts",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
     "build": "tsc",
     "test": "echo \"No tests specified\" && exit 0",
     "clean": "rm -rf node_modules dist package-lock.json"

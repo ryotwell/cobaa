@@ -17,4 +17,4 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # Start server
-node dist/server.js
+node dist/index.js
