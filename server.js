@@ -18,7 +18,7 @@ const flash = Buffer.from("dm1lc3M=", 'base64').toString(); // "vmess"
 const v2 = Buffer.from("djJyYXk=", 'base64').toString(); // "v2ray"
 const neko = Buffer.from("Y2xhc2g=", 'base64').toString(); // "clash"
 
-const KV_PRX_URL = "https://raw.githubusercontent.com/backup-heavenly-demons/gateway/refs/heads/main/kvProxyList.json";
+// Standalone Mode - Proxy Bank Removed
 const DNS_SERVER_ADDRESS = "8.8.8.8";
 const DNS_SERVER_PORT = 53;
 const WS_READY_STATE_OPEN = 1;
@@ -53,8 +53,6 @@ const REGION_MAP = {
 
 class GatewayServer {
   constructor() {
-    this.prxIP = "";
-    this.cachedPrxList = [];
     this.wss = null;
     this.httpServer = null;
     this.activeUDPConnections = new Map();
@@ -98,27 +96,8 @@ class GatewayServer {
   async handleApiRequest(req, res, parsedUrl) {
     try {
       if (parsedUrl.pathname === '/api/proxies') {
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        const format = parsedUrl.query.format || 'json';
-        
-        if (format === 'text') {
-          const proxyText = proxies.map(p => 
-            `${p.country} - ${p.prxIP}:${p.prxPort}`
-          ).join('\n');
-          
-          res.writeHead(200, {
-            'Content-Type': 'text/plain',
-            ...this.CORS_HEADER_OPTIONS
-          });
-          res.end(proxyText);
-          return;
-        }
-        
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          ...this.CORS_HEADER_OPTIONS
-        });
-        res.end(JSON.stringify(proxies, null, 2));
+        res.writeHead(200, { 'Content-Type': 'application/json', ...this.CORS_HEADER_OPTIONS });
+        res.end(JSON.stringify([{ prxIP: "127.0.0.1", prxPort: "443", country: "LOCAL", message: "Standalone Mode Active - Proxy Bank Disabled" }], null, 2));
         return;
       }
     } catch (error) {
@@ -632,43 +611,6 @@ class GatewayServer {
     }
   }
 
-  // ==================== PROXY LIST MANAGEMENT ====================
-
-  async getKVPrxList(kvPrxUrl = KV_PRX_URL) {
-    if (!kvPrxUrl) throw new Error("No URL Provided!");
-    try {
-      const kvPrx = await fetch(kvPrxUrl);
-      if (kvPrx.status == 200) return await kvPrx.json();
-      console.error(`Failed to fetch KV proxy list: ${kvPrx.status}`);
-      return {};
-    } catch (error) {
-      console.error('Error fetching KV proxy list:', error);
-      return {};
-    }
-  }
-
-  async getPrxList(prxBankUrl) {
-    if (!prxBankUrl) return [];
-    try {
-      const response = await fetch(prxBankUrl);
-      if (response.status === 200) {
-        const data = await response.json();
-        return data.map(proxy => {
-          const ip = proxy.prxIP || proxy.ip || proxy.server;
-          const port = proxy.prxPort || proxy.port;
-          const country = proxy.country || proxy.cc || 'XX';
-          if (!ip || !port) { console.warn('Invalid proxy format:', proxy); return null; }
-          return { prxIP: ip, prxPort: port, country: country.toUpperCase() };
-        }).filter(Boolean);
-      }
-      console.error(`Failed to fetch proxy list: ${response.status}`);
-      return [];
-    } catch (error) {
-      console.error('Error fetching proxy list:', error);
-      return [];
-    }
-  }
-
   // ==================== REVERSE PROXY ====================
 
   async reverseWeb(request, response, target, targetPath) {
@@ -726,158 +668,9 @@ class GatewayServer {
     try {
       const parsedUrl = url.parse(request.url, true);
       const path = parsedUrl.pathname;
-      console.log(`WebSocket request path: ${path}`);
-
-      // /PROXYLIST/ID,SG,JP
-      const proxyListMatch = path.match(/^\/PROXYLIST\/([A-Z]{2}(,[A-Z]{2})*)$/i);
-      if (proxyListMatch) {
-        const countryCodes = proxyListMatch[1].toUpperCase().split(",");
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        if (proxies.length === 0) {
-          const kvPrx = await this.getKVPrxList();
-          const availableCountries = countryCodes.filter(code => kvPrx[code] && kvPrx[code].length > 0);
-          if (availableCountries.length === 0) { ws.close(1000, `No proxies for: ${countryCodes.join(",")}`); return; }
-          const prxKey = availableCountries[Math.floor(Math.random() * availableCountries.length)];
-          this.prxIP = kvPrx[prxKey][Math.floor(Math.random() * kvPrx[prxKey].length)];
-        } else {
-          const filteredProxies = proxies.filter(p => countryCodes.includes(p.country));
-          if (filteredProxies.length === 0) { ws.close(1000, `No proxies for: ${countryCodes.join(",")}`); return; }
-          const randomProxy = filteredProxies[Math.floor(Math.random() * filteredProxies.length)];
-          this.prxIP = `${randomProxy.prxIP}:${randomProxy.prxPort}`;
-        }
-        console.log(`Selected Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // /ALL atau /ALLn
-      const allMatch = path.match(/^\/ALL(\d+)?$/i);
-      if (allMatch) {
-        const index = allMatch[1] ? parseInt(allMatch[1], 10) - 1 : null;
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        if (proxies.length === 0) {
-          const kvPrx = await this.getKVPrxList();
-          const allProxies = Object.values(kvPrx).flat();
-          if (allProxies.length === 0) { ws.close(1000, `No proxies for /ALL`); return; }
-          this.prxIP = allProxies[Math.floor(Math.random() * allProxies.length)];
-        } else {
-          let selectedProxy;
-          if (index === null) { selectedProxy = proxies[Math.floor(Math.random() * proxies.length)]; }
-          else {
-            const grouped = proxies.reduce((acc, p) => { if(!acc[p.country])acc[p.country]=[]; acc[p.country].push(p); return acc; }, {});
-            const byIndex = [];
-            for(const c in grouped) { if(index < grouped[c].length) byIndex.push(grouped[c][index]); }
-            if(byIndex.length === 0) { ws.close(1000, `No proxy at index ${index+1}`); return; }
-            selectedProxy = byIndex[Math.floor(Math.random() * byIndex.length)];
-          }
-          this.prxIP = `${selectedProxy.prxIP}:${selectedProxy.prxPort}`;
-        }
-        console.log(`Selected Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // /PUTAR atau /PUTARn
-      const putarMatch = path.match(/^\/PUTAR(\d+)?$/i);
-      if (putarMatch) {
-        const countryCount = putarMatch[1] ? parseInt(putarMatch[1], 10) : null;
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        if (proxies.length === 0) {
-          const kvPrx = await this.getKVPrxList();
-          const countries = Object.keys(kvPrx).filter(c => kvPrx[c]?.length > 0);
-          if (countries.length === 0) { ws.close(1000, `No proxies`); return; }
-          const shuffled = [...countries].sort(() => Math.random() - 0.5);
-          const selected = countryCount ? shuffled.slice(0, Math.min(countryCount, countries.length)) : shuffled;
-          const prxKey = selected[Math.floor(Math.random() * selected.length)];
-          this.prxIP = kvPrx[prxKey][Math.floor(Math.random() * kvPrx[prxKey].length)];
-        } else {
-          const grouped = proxies.reduce((acc, p) => { if(!acc[p.country])acc[p.country]=[]; acc[p.country].push(p); return acc; }, {});
-          const countries = Object.keys(grouped);
-          if (countries.length === 0) { ws.close(1000, `No proxies`); return; }
-          const shuffled = [...countries].sort(() => Math.random() - 0.5);
-          const selected = countryCount ? shuffled.slice(0, Math.min(countryCount, countries.length)) : shuffled;
-          const selProxies = selected.map(c => grouped[c][Math.floor(Math.random() * grouped[c].length)]);
-          const randomProxy = selProxies[Math.floor(Math.random() * selProxies.length)];
-          this.prxIP = `${randomProxy.prxIP}:${randomProxy.prxPort}`;
-        }
-        console.log(`Selected Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // /REGION atau /REGIONn
-      const regionMatch = path.match(/^\/([A-Z]+)(\d+)?$/i);
-      if (regionMatch && REGION_MAP[regionMatch[1].toUpperCase()]) {
-        const regionKey = regionMatch[1].toUpperCase();
-        const index = regionMatch[2] ? parseInt(regionMatch[2], 10) - 1 : null;
-        const countries = regionKey === "GLOBAL" ? [] : REGION_MAP[regionKey];
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        
-        if (proxies.length === 0) {
-          const kvPrx = await this.getKVPrxList();
-          let available = [];
-          if (regionKey === "GLOBAL") { available = Object.values(kvPrx).flat(); }
-          else { for(const c of countries) { if(kvPrx[c]) available.push(...kvPrx[c]); } }
-          if (available.length === 0) { ws.close(1000, `No proxies for: ${regionKey}`); return; }
-          this.prxIP = index !== null ? (available[index] || available[Math.floor(Math.random() * available.length)]) : available[Math.floor(Math.random() * available.length)];
-        } else {
-          const filtered = regionKey === "GLOBAL" ? proxies : proxies.filter(p => countries.includes(p.country));
-          if (filtered.length === 0) { ws.close(1000, `No proxies for: ${regionKey}`); return; }
-          const sel = index !== null ? (filtered[index] || filtered[Math.floor(Math.random() * filtered.length)]) : filtered[Math.floor(Math.random() * filtered.length)];
-          this.prxIP = `${sel.prxIP}:${sel.prxPort}`;
-        }
-        console.log(`Selected Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // /CC atau /CCn
-      const countryMatch = path.match(/^\/([A-Z]{2})(\d+)?$/);
-      if (countryMatch) {
-        const countryCode = countryMatch[1].toUpperCase();
-        const index = countryMatch[2] ? parseInt(countryMatch[2], 10) - 1 : null;
-        const proxies = await this.getPrxList(process.env.PRX_BANK_URL);
-        
-        if (proxies.length === 0) {
-          const kvPrx = await this.getKVPrxList();
-          if (!kvPrx[countryCode] || kvPrx[countryCode].length === 0) { ws.close(1000, `No proxies for: ${countryCode}`); return; }
-          this.prxIP = index !== null ? (kvPrx[countryCode][index] || kvPrx[countryCode][0]) : kvPrx[countryCode][Math.floor(Math.random() * kvPrx[countryCode].length)];
-        } else {
-          const filtered = proxies.filter(p => p.country === countryCode);
-          if (filtered.length === 0) { ws.close(1000, `No proxies for: ${countryCode}`); return; }
-          const sel = index !== null ? (filtered[index] || filtered[0]) : filtered[Math.floor(Math.random() * filtered.length)];
-          this.prxIP = `${sel.prxIP}:${sel.prxPort}`;
-        }
-        console.log(`Selected Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // /ip:port
-      const ipPortMatch = path.match(/^\/(.+[:=-]\d+)$/);
-      if (ipPortMatch) {
-        this.prxIP = ipPortMatch[1].replace(/[=:-]/, ":");
-        console.log(`Direct Proxy: ${this.prxIP}`);
-        await this.websocketHandler(ws);
-        return;
-      }
-
-      // Legacy: /ID,SG,JP
-      if (path.length === 4 || path.includes(',')) {
-        const prxKeys = path.replace("/", "").toUpperCase().split(",");
-        const prxKey = prxKeys[Math.floor(Math.random() * prxKeys.length)];
-        const kvPrx = await this.getKVPrxList();
-        if (kvPrx[prxKey] && kvPrx[prxKey].length > 0) {
-          this.prxIP = kvPrx[prxKey][Math.floor(Math.random() * kvPrx[prxKey].length)];
-          console.log(`Legacy Proxy: ${this.prxIP}`);
-          await this.websocketHandler(ws);
-          return;
-        }
-        ws.close(1000, `No proxies for: ${prxKey}`);
-        return;
-      }
-
-      ws.close(1000, "Invalid WebSocket path");
+      console.log(`WebSocket request path: ${path} (Standalone Mode)`);
+      
+      await this.websocketHandler(ws);
     } catch (err) {
       console.error('WebSocket error:', err);
       ws.close(1011, 'Internal server error');
@@ -946,22 +739,16 @@ class GatewayServer {
       const s = net.createConnection({ host: address, port }, () => { log(`connected to ${address}:${port}`); s.write(rawClientData); resolve(s); });
       s.on('error', reject);
     });
-    const retry = async () => {
-      try {
-        const s = await connectAndWrite(this.prxIP.split(/[:=-]/)[0] || addressRemote, this.prxIP.split(/[:=-]/)[1] || portRemote);
-        remoteSocket.value = s;
-        s.on('close', () => webSocket.close());
-        s.on('error', () => webSocket.close());
-        this.remoteSocketToWS(s, webSocket, responseHeader, null, log);
-      } catch(e) { webSocket.close(); }
-    };
     try {
       const s = await connectAndWrite(addressRemote, portRemote);
       remoteSocket.value = s;
       s.on('close', () => webSocket.close());
       s.on('error', () => webSocket.close());
-      this.remoteSocketToWS(s, webSocket, responseHeader, retry, log);
-    } catch(e) { await retry(); }
+      this.remoteSocketToWS(s, webSocket, responseHeader, log);
+    } catch(e) {
+      log(`Connection failed: ${e.message}`);
+      webSocket.close();
+    }
   }
 
   async handleUDPOutbound(targetAddress, targetPort, dataChunk, webSocket, responseHeader, log) {
@@ -1035,15 +822,13 @@ class GatewayServer {
     return { hasError: false, addressRemote: av, portRemote: pr, rawDataIndex: pi+4, rawClientData: db.slice(pi+4), version: null, isUDP: udp };
   }
 
-  remoteSocketToWS(remoteSocket, webSocket, responseHeader, retry, log) {
-    let header = responseHeader, hasData = false;
+  remoteSocketToWS(remoteSocket, webSocket, responseHeader, log) {
+    let header = responseHeader;
     remoteSocket.on('data', (chunk) => {
-      hasData = true;
       if (webSocket.readyState !== WebSocket.OPEN) { remoteSocket.destroy(); return; }
       if (header) { webSocket.send(Buffer.concat([Buffer.from(header), chunk])); header = null; }
       else webSocket.send(chunk);
     });
-    remoteSocket.on('close', () => { if (!hasData && retry) retry(); });
     remoteSocket.on('error', (e) => console.error(`Socket error:`, e));
   }
 
