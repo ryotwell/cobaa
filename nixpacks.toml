@@ -1,5 +1,4 @@
-[providers]
-bun = "1.x"
+providers = ["bun"]
 
 [build]
 cmd = "bun install && bun run build"
