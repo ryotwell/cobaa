@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Proxy Gateway dengan WebSocket & UDP native support untuk Railway",
   "main": "dist/index.js",
+  "packageManager": "bun@1.1.10",
   "scripts": {
     "start": "bun run dist/index.js",
     "dev": "bun --watch src/index.ts",

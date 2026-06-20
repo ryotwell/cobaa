@@ -1,0 +1,8 @@
+[providers]
+bun = "1.x"
+
+[build]
+cmd = "bun install && bun run build"
+
+[start]
+cmd = "bun run dist/index.js"
