@@ -1095,6 +1095,7 @@ class GatewayServer {
 if (require.main === module) {
   const server = new GatewayServer();
   try { require('dotenv').config(); } catch (e) {}
+  console.log(process.env);
   const port = process.env.PORT || 3000;
   server.start(port);
 }
