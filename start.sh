@@ -13,8 +13,8 @@ echo "NODE_ENV: $NODE_ENV"
 # Install dependencies jika node_modules tidak ada
 if [ ! -d "node_modules" ]; then
   echo "Installing dependencies..."
-  pnpm install --production
+  bun install --production
 fi
 
 # Start server
-node dist/index.js
+bun run dist/index.js
