@@ -1,7 +1,0 @@
-providers = ["bun"]
-
-[build]
-cmd = "bun install && bun run build"
-
-[start]
-cmd = "bun run dist/index.js"
