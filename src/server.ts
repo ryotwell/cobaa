@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as WebSocket from 'ws';
-import { PORT, REVERSE_TARGET } from './config';
+import { parse as parseUrl } from 'url';
+import { PORT, REVERSE_TARGET, PATH_VLESS, PATH_VMESS, PATH_TROJAN, PATH_SS } from './config';
 import { HttpController } from './controllers/http.controller';
 import { WsController } from './controllers/ws.controller';
 
@@ -18,8 +19,21 @@ export class GatewayServer {
       });
     });
 
-    this.wss = new WebSocket.Server({ server: this.httpServer, perMessageDeflate: false });
+    this.wss = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
     this.wss.on('connection', (ws: any, req) => this.wsController.handleConnection(ws, req));
+
+    this.httpServer.on('upgrade', (req, socket, head) => {
+      const pathname = parseUrl(req.url || '').pathname;
+      const allowedPaths = [PATH_VLESS, PATH_VMESS, PATH_TROJAN, PATH_SS];
+
+      if (pathname && allowedPaths.includes(pathname)) {
+        this.wss?.handleUpgrade(req, socket, head, (ws) => {
+          this.wss?.emit('connection', ws, req);
+        });
+      } else {
+        socket.destroy(); // Tolak koneksi WS jika path tidak sesuai
+      }
+    });
 
     const shutdown = () => {
       console.log('[server] shutting down...');
